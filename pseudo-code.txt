@@ -1,20 +1,16 @@
 BEGIN
 
-  // ── INISIALISASI ──────────────────────────────────────
   INIT sistem Computer Vision
 
-  // ── LOOP UTAMA ────────────────────────────────────────
   LOOP:
     Lakukan Image Processing (konversi ke HSV)
     Bagi frame kamera menjadi 3 Grid ROI: [Kiri | Tengah | Kanan]
 
-    // Cek timeout
     IF (tidak ada bola terdeteksi selama >= 3 detik) THEN
       Berhenti
       END  ← terminasi program
     END IF
 
-    // ── NAVIGASI AWAL (Centering) ─────────────────────
     IF (Bola Merah di Grid Kiri) OR (Bola Hijau di Grid Kanan) THEN
       GOTO STABIL
 
@@ -31,7 +27,6 @@ BEGIN
     END IF
 
 
-    // ── FASE STABIL & MAJU ────────────────────────────
     STABIL:
     REPEAT
       Maju Lurus
