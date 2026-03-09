@@ -1,0 +1,64 @@
+BEGIN
+
+  // ── INISIALISASI ──────────────────────────────────────
+  INIT sistem Computer Vision
+
+  // ── LOOP UTAMA ────────────────────────────────────────
+  LOOP:
+    Lakukan Image Processing (konversi ke HSV)
+    Bagi frame kamera menjadi 3 Grid ROI: [Kiri | Tengah | Kanan]
+
+    // Cek timeout
+    IF (tidak ada bola terdeteksi selama >= 3 detik) THEN
+      Berhenti
+      END  ← terminasi program
+    END IF
+
+    // ── NAVIGASI AWAL (Centering) ─────────────────────
+    IF (Bola Merah di Grid Kiri) OR (Bola Hijau di Grid Kanan) THEN
+      GOTO STABIL
+
+    ELSE IF (Bola Hijau di Grid Kiri) THEN
+      Manuver ke Kiri
+      GOTO LOOP
+
+    ELSE IF (Bola Merah di Grid Kanan) THEN
+      Manuver ke Kanan
+      GOTO LOOP
+
+    ELSE
+      GOTO STABIL
+    END IF
+
+
+    // ── FASE STABIL & MAJU ────────────────────────────
+    STABIL:
+    REPEAT
+      Maju Lurus
+
+      IF (mendeteksi Bola Hitam) THEN
+
+        // Hindari rintangan bola hitam
+        Manuver ke Kanan selama 5 detik untuk memutari Bola Hitam
+
+        // Re-evaluasi posisi setelah memutar
+        IF (Bola Merah di Grid Kiri) AND (Bola Hijau di Grid Kanan) THEN
+          Maju Lurus     ← lanjut maju langsung
+          GOTO STABIL
+
+        ELSE IF (Bola Hijau di Grid Kiri) THEN
+          GOTO STABIL    ← kembali ke loop stabil (centering kiri)
+
+        ELSE IF (Bola Merah di Grid Kiri) THEN
+          GOTO STABIL    ← kembali ke loop stabil (centering kanan)
+
+        ELSE
+          Maju Lurus
+          GOTO STABIL
+        END IF
+
+      END IF
+
+    UNTIL (program dihentikan)
+
+END
