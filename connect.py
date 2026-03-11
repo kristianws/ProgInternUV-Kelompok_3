@@ -122,12 +122,15 @@ while cap.isOpened():
     
     red_ball   = None
     green_ball = None
+    black_ball = None
     for box in high_conf:
         cls_name = model.names[int(box.cls[0])].lower()
-        if any(k in cls_name for k in ('merah', 'red')):
+        if any(k in cls_name for k in ('bola_merah')):
             red_ball = box
-        elif any(k in cls_name for k in ('hijau', 'green')):
+        elif any(k in cls_name for k in ('bola_hijau')):
             green_ball = box
+        elif any(k in cls_name for k in ('bola_hitam')):
+            black_ball = box
     
     target_yaw_rate = 0.0
     nav_status      = "SEARCHING..."
@@ -135,26 +138,30 @@ while cap.isOpened():
     if red_ball is not None and green_ball is not None:
         rx1, ry1, rx2, ry2 = red_ball.xyxy[0].tolist()
         gx1, gy1, gx2, gy2 = green_ball.xyxy[0].tolist()
+        bx1, by1, bx2, by2 = black_ball.xyxy[0].tolist()
 
         red_cx   = (rx1 + rx2) / 2
         green_cx = (gx1 + gx2) / 2
+        black_cx = (bx1 + bx2) / 2
 
         red_zone   = get_zone(red_cx,   left_boundary, right_boundary)
         green_zone = get_zone(green_cx, left_boundary, right_boundary)
+        black_zone = get_zone(black_cx, left_boundary, right_boundary)
 
         # Luas bounding box relatif terhadap frame
         red_area_ratio   = ((rx2 - rx1) * (ry2 - ry1)) / frame_area
         green_area_ratio = ((gx2 - gx1) * (gy2 - gy1)) / frame_area
+        black_area_ratio = ((bx2 - bx1) * (by2 - by1)) / frame_area
 
         red_is_large   = red_area_ratio   > LARGE_BOX_RATIO
         green_is_large = green_area_ratio > LARGE_BOX_RATIO
+        black_is_large = black_area_ratio > LARGE_BOX_RATIO
 
         if red_zone == "RIGHT" and green_zone == "LEFT":
             target_yaw_rate = 0.0
             nav_status      = "STRAIGHT ✓"
 
-        elif (red_is_large or green_is_large) and \
-             (red_zone == "CENTER" or green_zone == "CENTER"):
+        elif (red_is_large or green_is_large) and (red_zone == "CENTER" or green_zone == "CENTER"):
             # Arah yaw mengikuti kondisi sebelumnya (pertahankan tanda)
             direction       = 1 if current_yaw_rate >= 0 else -1
             target_yaw_rate = direction * MAX_YAW_CLOSE
@@ -167,6 +174,10 @@ while cap.isOpened():
         elif green_zone == "RIGHT":
             target_yaw_rate = MAX_YAW_NORMAL
             nav_status      = "TURN RIGHT → (green right)"
+        
+        elif black_zone == "CENTER":
+            target_yaw_rate = MAX_YAW_NORMAL
+            nav_status      = "TURN AROUND"
 
         else:
             target_yaw_rate = 0.0
