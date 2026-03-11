@@ -14,7 +14,10 @@ import time
 
 print('Connecting...')
 vehicle = connect('udp:127.0.0.1:14551', wait_ready=True)
+<<<<<<< HEAD
 # vehicle = connect('/dev/ttyACM0')
+=======
+>>>>>>> 9b7f3c4 (Add files via upload)
 
 def arm_and_takeoff(altitude):
     while not vehicle.is_armable:
@@ -83,15 +86,23 @@ def gerak(vx,yaw_rate):
     vehicle.flush()
 
 
+<<<<<<< HEAD
 model = YOLO('/home/risanws/learning/kuliah/bengawan/final-project/ball-detection-yolov5.pt')
 model.conf = 0.9 
+=======
+model = YOLO('/home/risanws/learning/kuliah/bengawan/final-project/yolov8s.pt')
+>>>>>>> 9b7f3c4 (Add files via upload)
 cap = cv2.VideoCapture(0)
 arm_and_takeoff(0)
 
 prev_time = time.time()  # Waktu sebelumnya untuk menghitung FPS
 ground_speed = 2
 
+<<<<<<< HEAD
 CONF_THRESHOLD    = 0.8          # ambang batas confidence
+=======
+CONF_THRESHOLD    = 0.6          # ambang batas confidence
+>>>>>>> 9b7f3c4 (Add files via upload)
 CENTER_HALF_WIDTH = 75           # lebar setengah zona tengah (piksel)
 LARGE_BOX_RATIO   = 0.60         # bounding box dianggap "dekat" jika > 70% luas frame
 MAX_YAW_NORMAL    = math.radians(30)   # yaw rate normal (belok)
@@ -113,7 +124,11 @@ while cap.isOpened():
     left_boundary = center_x - CENTER_HALF_WIDTH
     right_boundary = center_x + CENTER_HALF_WIDTH
       
+<<<<<<< HEAD
     results = model(frame, imgsz=416)
+=======
+    results = model(frame, imgsz=512)
+>>>>>>> 9b7f3c4 (Add files via upload)
     boxes   = results[0].boxes
     
     high_conf = sorted(
@@ -124,6 +139,7 @@ while cap.isOpened():
     
     red_ball   = None
     green_ball = None
+<<<<<<< HEAD
     black_ball = None
     for box in high_conf:
         cls_name = model.names[int(box.cls[0])].lower()
@@ -133,6 +149,14 @@ while cap.isOpened():
             green_ball = box
         elif any(k in cls_name for k in ('bola_hitam')):
             black_ball = box
+=======
+    for box in high_conf:
+        cls_name = model.names[int(box.cls[0])].lower()
+        if any(k in cls_name for k in ('merah', 'red')):
+            red_ball = box
+        elif any(k in cls_name for k in ('hijau', 'green')):
+            green_ball = box
+>>>>>>> 9b7f3c4 (Add files via upload)
     
     target_yaw_rate = 0.0
     nav_status      = "SEARCHING..."
@@ -140,6 +164,7 @@ while cap.isOpened():
     if red_ball is not None and green_ball is not None:
         rx1, ry1, rx2, ry2 = red_ball.xyxy[0].tolist()
         gx1, gy1, gx2, gy2 = green_ball.xyxy[0].tolist()
+<<<<<<< HEAD
         bx1, by1, bx2, by2 = black_ball.xyxy[0].tolist()
 
         red_cx   = (rx1 + rx2) / 2
@@ -165,6 +190,40 @@ while cap.isOpened():
         elif black_zone == "CENTER":
             target_yaw_rate = MAX_YAW_NORMAL
             nav_status      = "TURN AROUND"
+=======
+
+        red_cx   = (rx1 + rx2) / 2
+        green_cx = (gx1 + gx2) / 2
+
+        red_zone   = get_zone(red_cx,   left_boundary, right_boundary)
+        green_zone = get_zone(green_cx, left_boundary, right_boundary)
+
+        # Luas bounding box relatif terhadap frame
+        red_area_ratio   = ((rx2 - rx1) * (ry2 - ry1)) / frame_area
+        green_area_ratio = ((gx2 - gx1) * (gy2 - gy1)) / frame_area
+
+        red_is_large   = red_area_ratio   > LARGE_BOX_RATIO
+        green_is_large = green_area_ratio > LARGE_BOX_RATIO
+
+        if red_zone == "RIGHT" and green_zone == "LEFT":
+            target_yaw_rate = 0.0
+            nav_status      = "STRAIGHT ✓"
+
+        elif (red_is_large or green_is_large) and \
+             (red_zone == "CENTER" or green_zone == "CENTER"):
+            # Arah yaw mengikuti kondisi sebelumnya (pertahankan tanda)
+            direction       = 1 if current_yaw_rate >= 0 else -1
+            target_yaw_rate = direction * MAX_YAW_CLOSE
+            nav_status      = "CLOSE! MAX YAW ⬆"
+
+        elif red_zone == "LEFT":
+            target_yaw_rate = -MAX_YAW_NORMAL
+            nav_status      = "TURN LEFT ← (red left)"
+
+        elif green_zone == "RIGHT":
+            target_yaw_rate = MAX_YAW_NORMAL
+            nav_status      = "TURN RIGHT → (green right)"
+>>>>>>> 9b7f3c4 (Add files via upload)
 
         else:
             target_yaw_rate = 0.0
@@ -174,17 +233,24 @@ while cap.isOpened():
         rx1, _, rx2, _ = red_ball.xyxy[0].tolist()
         red_cx   = (rx1 + rx2) / 2
         red_zone = get_zone(red_cx, left_boundary, right_boundary)
+<<<<<<< HEAD
         if red_zone == "RIGHT":
             target_yaw_rate = MAX_YAW_NORMAL
             nav_status      = "TURN RIGHT ← (only red)"
         # elif red_zone == "LEFT":
         #     target_yaw_rate = -MAX_YAW_NORMAL
         #     nav_status      = "TURN RIGHT → (only red)"
+=======
+        if red_zone == "LEFT":
+            target_yaw_rate = -MAX_YAW_NORMAL
+            nav_status      = "TURN LEFT ← (only red)"
+>>>>>>> 9b7f3c4 (Add files via upload)
 
     elif green_ball is not None:
         gx1, _, gx2, _ = green_ball.xyxy[0].tolist()
         green_cx   = (gx1 + gx2) / 2
         green_zone = get_zone(green_cx, left_boundary, right_boundary)
+<<<<<<< HEAD
         if green_zone == "LEFT":
             target_yaw_rate = -MAX_YAW_NORMAL
             nav_status      = "TURN LEFT → (only green)"
@@ -210,6 +276,24 @@ while cap.isOpened():
     #     current_yaw_rate += math.copysign(YAW_STEP, diff)
 
     gerak(ground_speed, target_yaw_rate)
+=======
+        if green_zone == "RIGHT":
+            target_yaw_rate = MAX_YAW_NORMAL
+            nav_status      = "TURN RIGHT → (only green)"
+    else:
+        target_yaw_rate = 0.0
+        ground_speed = 0
+        nav_status      = "SEARCHING..."
+        
+    # ─── Smooth yaw rate (lerp per-frame step) ─────────────────────────────────
+    diff = target_yaw_rate - current_yaw_rate
+    if abs(diff) <= YAW_STEP:
+        current_yaw_rate = target_yaw_rate
+    else:
+        current_yaw_rate += math.copysign(YAW_STEP, diff)
+
+    gerak(ground_speed, current_yaw_rate)
+>>>>>>> 9b7f3c4 (Add files via upload)
 
     # ─── Visualisasi ───────────────────────────────────────────────────────────
     annoted = results[0].plot()
@@ -222,11 +306,16 @@ while cap.isOpened():
     fps       = 1 / (curr_time - prev_time + 1e-9)
     prev_time = curr_time
     draw_hud(annoted, fps, nav_status, math.degrees(current_yaw_rate), frame_h)
+<<<<<<< HEAD
     # annoted = cv2.flip(annoted, 1)  # Flip horizontal untuk tampilan seperti cermin
 
     annoted = cv2.resize(annoted, (416, 416))  # Resize untuk tampilan lebih kecil
     cv2.imshow("YOLOv8 Boat Navigation", annoted)
     print(nav_status)
+=======
+
+    cv2.imshow("YOLOv8 Boat Navigation", annoted)
+>>>>>>> 9b7f3c4 (Add files via upload)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
