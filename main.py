@@ -118,7 +118,7 @@ def ball_zone(ball):
 model = torch.hub.load(
     'ultralytics/yolov5', 
     'custom', 
-    path='/home/risanws/learning/kuliah/bengawan/final-project/ball-detection-yolov5.pt', 
+    path='./ball-detection-yolov5.pt', 
     source='local'
 )
 
