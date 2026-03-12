@@ -193,17 +193,14 @@ if __name__ == "__main__":
             red_zone   = ball_zone(red_ball)
             green_zone = ball_zone(green_ball)
 
-            # ✅ Kondisi ideal: merah di kiri, hijau di kanan → lurus
             if red_zone == "LEFT" and green_zone == "RIGHT":
                 target_yaw_rate = 0.0
                 nav_status      = "STRAIGHT ✓"
 
-            # 🔴 Merah di kanan atau tengah → belok kiri sampai merah kembali ke kiri
             elif red_zone in ("RIGHT", "CENTER"):
                 target_yaw_rate = -MAX_YAW_NORMAL
                 nav_status      = f"TURN LEFT ← (red={red_zone})"
 
-            # 🟢 Hijau di kiri atau tengah → belok kanan sampai hijau kembali ke kanan
             elif green_zone in ("LEFT", "CENTER"):
                 target_yaw_rate = MAX_YAW_NORMAL
                 nav_status      = f"TURN RIGHT → (green={green_zone})"
@@ -211,7 +208,6 @@ if __name__ == "__main__":
         elif red_ball is not None:
             red_zone = ball_zone(red_ball)
 
-            # 🔴 Hanya ada merah, pastikan dia di kiri
             if red_zone in ("RIGHT", "CENTER"):
                 target_yaw_rate = -MAX_YAW_NORMAL
                 nav_status      = f"TURN LEFT ← (only red={red_zone})"
@@ -222,7 +218,6 @@ if __name__ == "__main__":
         elif green_ball is not None:
             green_zone = ball_zone(green_ball)
 
-            # 🟢 Hanya ada hijau, pastikan dia di kanan
             if green_zone in ("LEFT", "CENTER"):
                 target_yaw_rate = MAX_YAW_NORMAL
                 nav_status      = f"TURN RIGHT → (only green={green_zone})"
@@ -233,7 +228,6 @@ if __name__ == "__main__":
         elif black_ball is not None:
             black_zone = ball_zone(black_ball)
 
-            # ⚫ Bola hitam di tengah & sudah dekat → putar mengitarinya
             if black_zone == "CENTER":
                 target_yaw_rate = MAX_YAW_CLOSE
                 nav_status      = "AVOID! TURN AROUND (black CENTER+CLOSE)"
@@ -245,7 +239,6 @@ if __name__ == "__main__":
             target_yaw_rate = 0.0
             nav_status      = "SEARCHING..."
             
-        # ─── Smooth yaw rate (lerp per-frame step) ─────────────────────────────────
         diff = target_yaw_rate - current_yaw_rate
         if abs(diff) <= YAW_STEP:
             current_yaw_rate = target_yaw_rate
