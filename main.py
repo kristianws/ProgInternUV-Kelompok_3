@@ -84,8 +84,8 @@ def gerak(vx,yaw_rate):
 
 
 model = YOLO('ball-detection-yolov5.pt')
-model.conf = 0.8 # confidence threshold
-cap = cv2.VideoCapture('video-3.mp4')
+model.conf = 0.9 # confidence threshold
+cap = cv2.VideoCapture("video-3.mp4")
 fps = cap.get(cv2.CAP_PROP_FPS)
 delay = int(1000 / fps)
 arm_and_takeoff(0)
@@ -93,12 +93,15 @@ arm_and_takeoff(0)
 prev_time = time.time()  # Waktu sebelumnya untuk menghitung FPS
 ground_speed = 0.3
 
-CENTER_HALF_WIDTH = 75           # lebar setengah zona tengah (piksel)
+CENTER_HALF_WIDTH = 50           # lebar setengah zona tengah (piksel)
 MAX_YAW_NORMAL    = math.radians(30)   # yaw rate normal (belok)
 MAX_YAW_CLOSE     = 0.3   # yaw rate saat objek terlalu dekat
 YAW_STEP          = math.radians(3)    # kecepatan perubahan yaw per frame (smoothing)
 
 current_yaw_rate = 0.0 
+
+is_avoiding_obstacle = False # tanda apakah kapal sedang menghindar obstacle
+yaw_rate_avoidance = 0.0 # variabel untuk menyimpan yaw rate saat menghindar obstacle
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -108,7 +111,7 @@ while cap.isOpened():
     frame_h, frame_w = frame.shape[:2]
     frame_area = frame_w * frame_h
     
-    center_x      = frame_w // 2
+    center_x      = frame_w //2
     left_boundary = center_x - CENTER_HALF_WIDTH
     right_boundary = center_x + CENTER_HALF_WIDTH
       
@@ -130,66 +133,77 @@ while cap.isOpened():
     target_yaw_rate = 0.0
     nav_status      = "SEARCHING..."
 
+    # Logika navigasi
     if red_ball is not None and green_ball is not None:
+        is_avoiding_obstacle = False 
+        # Mendapatkan koordinat bounding box dari bola merah dan hijau
         rx1, ry1, rx2, ry2 = red_ball.xyxy[0].tolist()
         gx1, gy1, gx2, gy2 = green_ball.xyxy[0].tolist()
 
+        # mendapatkan koordinat tengah (cx) dari masing-masing bola
         red_cx   = (rx1 + rx2) / 2
         green_cx = (gx1 + gx2) / 2
+        center_between_balls = (red_cx + green_cx) / 2
 
-        red_zone   = get_zone(red_cx,   left_boundary, right_boundary)
-        green_zone = get_zone(green_cx, left_boundary, right_boundary)
-
-        if red_zone == "LEFT" and green_zone == "RIGHT":
-            target_yaw_rate = 0.0
-            nav_status      = "LURUS"
-
-        elif red_zone == "RIGHT":
-            target_yaw_rate = MAX_YAW_NORMAL
-            nav_status      = "BELOK KANAN"
-
-        elif green_zone == "LEFT":
-            target_yaw_rate = -MAX_YAW_NORMAL
-            nav_status      = "BELOK KIRI"
+        center_zone = get_zone(center_between_balls, left_boundary, right_boundary)
         
-        else:
+        if center_zone == "CENTER":
             target_yaw_rate = 0.0
-            nav_status      = "LURUS"
+            nav_status      = "[ARAH KAPAL] LURUS (KEDUA BOLA)"
+            
+        elif center_zone == "RIGHT":
+            target_yaw_rate = MAX_YAW_NORMAL
+            nav_status      = "[ARAH KAPAL] BELOK KANAN (KEDUA BOLA)"
 
-    elif black_ball is not None:
-        bx1, _, bx2, _ = black_ball.xyxy[0].tolist()
-        black_cx   = (bx1 + bx2) / 2
-        black_zone = get_zone(black_cx, left_boundary, right_boundary)
-        if black_zone == "CENTER":
-            target_yaw_rate = MAX_YAW_CLOSE
-            nav_status      = "BERPUTAR"
+        elif center_zone == "LEFT":
+            target_yaw_rate = -MAX_YAW_NORMAL
+            nav_status      = "[ARAH KAPAL] BELOK KIRI (KEDUA BOLA)"
 
+    elif black_ball is not None and black_ball.conf[0] > 0.9:
+      # is_avoiding_obstacle = True
+      bx1, _, bx2, _ = black_ball.xyxy[0].tolist()
+      black_cx   = (bx1 + bx2) / 2
+      black_zone = get_zone(black_cx, left_boundary, right_boundary)
+      quarter_y = frame_h // 4
+      if black_zone == "RIGHT":
+        if black_cx > quarter_y: 
+          target_yaw_rate = MAX_YAW_CLOSE
+          nav_status      = "[ARAH KAPAL] BELOK KANAN (BOLA HITAM DEKAT)"
+          is_avoiding_obstacle = True
+      elif black_zone == "LEFT" or black_zone == "CENTER":
+          target_yaw_rate = -MAX_YAW_NORMAL
+          nav_status      = "[ARAH KAPAL] BELOK KIRI (BOLA HITAM)"
+      elif black_zone == "RIGHT":
+          target_yaw_rate = 0.0
+          nav_status      = "[ARAH KAPAL] LURUS (BOLA HITAM)"
+
+    # Logika navigasi apabila hanya bola merah yang terdeteksi
     elif red_ball is not None:
+        is_avoiding_obstacle = False
         rx1, _, rx2, _ = red_ball.xyxy[0].tolist()
         red_cx   = (rx1 + rx2) / 2
         red_zone = get_zone(red_cx, left_boundary, right_boundary)
-        if red_zone == "LEFT":
-            target_yaw_rate = 0.0
-            nav_status      = "LURUS"
-        elif red_zone == "RIGHT":
+        
+        if red_zone == "CENTER" or red_zone == "RIGHT":
             target_yaw_rate = MAX_YAW_NORMAL
-            nav_status      = "BELOK KANAN"
+            nav_status      = "[ARAH KAPAL] BELOK KANAN ( BOLA MERAH)"
 
+
+    # Logika navigasi apabila hanya bola hijau yang terdeteksi
     elif green_ball is not None:
+        is_avoiding_obstacle = False
         gx1, _, gx2, _ = green_ball.xyxy[0].tolist()
         green_cx   = (gx1 + gx2) / 2
         green_zone = get_zone(green_cx, left_boundary, right_boundary)
-        if green_zone == "LEFT":
+        
+        if green_zone == "CENTER" or green_zone == "LEFT":
             target_yaw_rate = -MAX_YAW_NORMAL
-            nav_status      = "BELOK KIRI"
-        elif green_zone == "RIGHT":
-            target_yaw_rate = 0.0
-            nav_status      = "LURUS"
-      
+            nav_status      = "[ARAH KAPAL] BELOK KIRI (BOLA HIJAU)"
+
     else:
         target_yaw_rate = 0.0
         # ground_speed = 0
-        nav_status      = "LURUS"
+        nav_status      = "[ARAH KAPAL] LURUS (TIDAK ADA BOLA)"
         
     # ─── Smooth yaw rate (lerp per-frame step) ─────────────────────────────────
     diff = target_yaw_rate - current_yaw_rate
