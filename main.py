@@ -84,8 +84,10 @@ def gerak(vx,yaw_rate):
 
 
 model = YOLO('ball-detection-yolov5.pt')
-model.conf = 0.1 
+model.conf = 0.8 # confidence threshold
 cap = cv2.VideoCapture('video-3.mp4')
+fps = cap.get(cv2.CAP_PROP_FPS)
+delay = int(1000 / fps)
 arm_and_takeoff(0)
 
 prev_time = time.time()  # Waktu sebelumnya untuk menghitung FPS
@@ -140,19 +142,19 @@ while cap.isOpened():
 
         if red_zone == "LEFT" and green_zone == "RIGHT":
             target_yaw_rate = 0.0
-            nav_status      = "1 ✓"
+            nav_status      = "LURUS"
 
         elif red_zone == "RIGHT":
             target_yaw_rate = MAX_YAW_NORMAL
-            nav_status      = "2 ← (red left)"
+            nav_status      = "BELOK KANAN"
 
         elif green_zone == "LEFT":
             target_yaw_rate = -MAX_YAW_NORMAL
-            nav_status      = "3"
+            nav_status      = "BELOK KIRI"
         
         else:
             target_yaw_rate = 0.0
-            nav_status      = "5"
+            nav_status      = "LURUS"
 
     elif black_ball is not None:
         bx1, _, bx2, _ = black_ball.xyxy[0].tolist()
@@ -160,7 +162,7 @@ while cap.isOpened():
         black_zone = get_zone(black_cx, left_boundary, right_boundary)
         if black_zone == "CENTER":
             target_yaw_rate = MAX_YAW_CLOSE
-            nav_status      = "11"
+            nav_status      = "BERPUTAR"
 
     elif red_ball is not None:
         rx1, _, rx2, _ = red_ball.xyxy[0].tolist()
@@ -168,10 +170,10 @@ while cap.isOpened():
         red_zone = get_zone(red_cx, left_boundary, right_boundary)
         if red_zone == "LEFT":
             target_yaw_rate = 0.0
-            nav_status      = "6"
+            nav_status      = "LURUS"
         elif red_zone == "RIGHT":
             target_yaw_rate = MAX_YAW_NORMAL
-            nav_status      = "7 RIGHT"
+            nav_status      = "BELOK KANAN"
 
     elif green_ball is not None:
         gx1, _, gx2, _ = green_ball.xyxy[0].tolist()
@@ -179,15 +181,15 @@ while cap.isOpened():
         green_zone = get_zone(green_cx, left_boundary, right_boundary)
         if green_zone == "LEFT":
             target_yaw_rate = -MAX_YAW_NORMAL
-            nav_status      = "8"
+            nav_status      = "BELOK KIRI"
         elif green_zone == "RIGHT":
             target_yaw_rate = 0.0
-            nav_status      = "9"
+            nav_status      = "LURUS"
       
     else:
         target_yaw_rate = 0.0
         # ground_speed = 0
-        nav_status      = "10..."
+        nav_status      = "LURUS"
         
     # ─── Smooth yaw rate (lerp per-frame step) ─────────────────────────────────
     diff = target_yaw_rate - current_yaw_rate
@@ -201,19 +203,17 @@ while cap.isOpened():
     # ─── Visualisasi ───────────────────────────────────────────────────────────
     annoted = results[0].plot()
 
-    # Gambar grid SEBELUM flip agar posisi label sesuai tampilan
     draw_grid(annoted, left_boundary, right_boundary, frame_h)
-
 
     curr_time = time.time()
     fps       = 1 / (curr_time - prev_time + 1e-9)
     prev_time = curr_time
-    draw_hud(annoted, fps, nav_status, math.degrees(current_yaw_rate), frame_h)
+    draw_hud(annoted, delay, nav_status, math.degrees(current_yaw_rate), frame_h)
 
     cv2.imshow("YOLOv5 Boat Navigation", annoted)
     print(nav_status)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(delay) & 0xFF == ord('q'):
         break
       
 
