@@ -85,7 +85,8 @@ def gerak(vx,yaw_rate):
 
 model = YOLO('ball-detection-yolov5.pt')
 model.conf = 0.9 # confidence threshold
-cap = cv2.VideoCapture("video-3.mp4")
+# cap = cv2.VideoCapture("video-3.mp4")
+cap = cv2.VideoCapture(0)
 fps = cap.get(cv2.CAP_PROP_FPS)
 delay = int(1000 / fps)
 arm_and_takeoff(0)
@@ -95,12 +96,12 @@ ground_speed = 0.3
 
 CENTER_HALF_WIDTH = 50           # lebar setengah zona tengah (piksel)
 MAX_YAW_NORMAL    = math.radians(30)   # yaw rate normal (belok)
-MAX_YAW_CLOSE     = 0.3   # yaw rate saat objek terlalu dekat
+MAX_YAW_CLOSE     = 0.4   # yaw rate saat objek terlalu dekat
 YAW_STEP          = math.radians(3)    # kecepatan perubahan yaw per frame (smoothing)
 
 current_yaw_rate = 0.0 
 
-is_evading = False # tanda apakah kapal sedang menghindar obstacle
+is_obstacle_avoid = False # tanda apakah kapal sedang menghindar obstacle
 has_encountered_black = False   # Mengingat apakah sudah pernah ketemu bola hitam
 empty_view_start_time = 0       # Mencatat kapan layar mulai kosong
 FINISH_TIMEOUT = 5.0
@@ -117,7 +118,7 @@ while cap.isOpened():
     left_boundary = center_x - CENTER_HALF_WIDTH
     right_boundary = center_x + CENTER_HALF_WIDTH
       
-    results = model(frame)
+    results = model(frame, imgsz = 416)
     boxes   = results[0].boxes
 
     red_ball   = None
@@ -139,7 +140,7 @@ while cap.isOpened():
         empty_view_start_time = 0
     # Logika navigasi
     if red_ball is not None and green_ball is not None:
-        is_evading = False 
+        is_obstacle_avoid = False 
         # Mendapatkan koordinat bounding box dari bola merah dan hijau
         rx1, ry1, rx2, ry2 = red_ball.xyxy[0].tolist()
         gx1, gy1, gx2, gy2 = green_ball.xyxy[0].tolist()
@@ -164,18 +165,18 @@ while cap.isOpened():
             nav_status      = "[ARAH KAPAL] BELOK KIRI (KEDUA BOLA)"
 
     elif black_ball is not None and black_ball.conf[0] > 0.9:
-      # is_evading = True
+      # is_obstacle_avoid = True
       bx1, _, bx2, _ = black_ball.xyxy[0].tolist()
       black_cx   = (bx1 + bx2) / 2
       black_zone = get_zone(black_cx, left_boundary, right_boundary)
-      quarter_y = frame_h // 8
+      quarter_y = frame_h * 0.9
       if black_zone == "RIGHT":
         if black_cx > quarter_y: 
           has_encountered_black = True
           target_yaw_rate = MAX_YAW_CLOSE
           ground_speed = 0.5
           nav_status      = "[ARAH KAPAL] BELOK KANAN (BOLA HITAM DEKAT)"
-          is_evading = True
+          is_obstacle_avoid = True
       elif black_zone == "LEFT" or black_zone == "CENTER":
           target_yaw_rate = -MAX_YAW_NORMAL
           nav_status      = "[ARAH KAPAL] BELOK KIRI (BOLA HITAM)"
@@ -185,7 +186,7 @@ while cap.isOpened():
 
     # Logika navigasi apabila hanya bola merah yang terdeteksi
     elif red_ball is not None:
-        is_evading = False
+        is_obstacle_avoid = False
         rx1, _, rx2, _ = red_ball.xyxy[0].tolist()
         red_cx   = (rx1 + rx2) / 2
         red_zone = get_zone(red_cx, left_boundary, right_boundary)
@@ -197,7 +198,7 @@ while cap.isOpened():
 
     # Logika navigasi apabila hanya bola hijau yang terdeteksi
     elif green_ball is not None:
-        is_evading = False
+        is_obstacle_avoid = False
         gx1, _, gx2, _ = green_ball.xyxy[0].tolist()
         green_cx   = (gx1 + gx2) / 2
         green_zone = get_zone(green_cx, left_boundary, right_boundary)
@@ -207,22 +208,18 @@ while cap.isOpened():
             nav_status      = "[ARAH KAPAL] BELOK KIRI (BOLA HIJAU)"
 
     else:
-        # --- KAMERA TIDAK MELIHAT BOLA APAPUN ---
-        if is_evading == True:
+        if is_obstacle_avoid == True:
             target_yaw_rate = MAX_YAW_CLOSE
             nav_status      = "MELANJUTKAN MENGHINDAR (BLIND)"
         else:
             target_yaw_rate = 0.0
             nav_status      = "LURUS (MENCARI BOLA)"
             
-            # --- CEK KONDISI FINISH ---
-            # Jika sudah pernah lewat bola hitam dan layar kosong
             if has_encountered_black:
                 # Mulai hitung waktu jika belum dimulai
                 if empty_view_start_time == 0:
                     empty_view_start_time = time.time()
                 
-                # Cek apakah sudah melebihi batas waktu (misal 5 detik)
                 elapsed_time = time.time() - empty_view_start_time
                 if elapsed_time > FINISH_TIMEOUT:
                     print("Mission Accomplished! Melewati rintangan terakhir.")
@@ -246,12 +243,12 @@ while cap.isOpened():
     curr_time = time.time()
     fps       = 1 / (curr_time - prev_time + 1e-9)
     prev_time = curr_time
-    draw_hud(annoted, delay, nav_status, math.degrees(current_yaw_rate), frame_h)
+    draw_hud(annoted, fps, nav_status, math.degrees(current_yaw_rate), frame_h)
 
     cv2.imshow("YOLOv5 Boat Navigation", annoted)
     print(nav_status)
 
-    if cv2.waitKey(delay) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord('q'):
         break
       
       
