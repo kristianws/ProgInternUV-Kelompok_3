@@ -11,6 +11,7 @@ except:
 from dronekit import connect, VehicleMode, Command
 from pymavlink import mavutil
 import time
+CONFIDENT = 0.9
 
 print('Connecting...')
 vehicle = connect('udp:127.0.0.1:14551', wait_ready=True)
@@ -32,7 +33,6 @@ def arm_and_takeoff(altitude):
         if v_alt >= altitude - 1.0:
             print("Target altitude reached")
             break
-          
 
 
 def get_zone(cx, left_boundary, right_boundary):
@@ -84,9 +84,9 @@ def gerak(vx,yaw_rate):
 
 
 model = YOLO('ball-detection-yolov5.pt')
-model.conf = 0.9 # confidence threshold
-# cap = cv2.VideoCapture("video-3.mp4")
-cap = cv2.VideoCapture(0)
+model.conf = CONFIDENT # confidence threshold
+cap = cv2.VideoCapture("video-3.mp4")
+# cap = cv2.VideoCapture(0)
 fps = cap.get(cv2.CAP_PROP_FPS)
 delay = int(1000 / fps)
 arm_and_takeoff(0)
@@ -112,7 +112,6 @@ while cap.isOpened():
         break
       
     frame_h, frame_w = frame.shape[:2]
-    frame_area = frame_w * frame_h
     
     center_x      = frame_w //2
     left_boundary = center_x - CENTER_HALF_WIDTH
@@ -164,7 +163,7 @@ while cap.isOpened():
             target_yaw_rate = -MAX_YAW_NORMAL
             nav_status      = "[ARAH KAPAL] BELOK KIRI (KEDUA BOLA)"
 
-    elif black_ball is not None and black_ball.conf[0] > 0.9:
+    elif black_ball is not None and black_ball.conf[0] > CONFIDENT:
       # is_obstacle_avoid = True
       bx1, _, bx2, _ = black_ball.xyxy[0].tolist()
       black_cx   = (bx1 + bx2) / 2
@@ -243,12 +242,12 @@ while cap.isOpened():
     curr_time = time.time()
     fps       = 1 / (curr_time - prev_time + 1e-9)
     prev_time = curr_time
-    draw_hud(annoted, fps, nav_status, math.degrees(current_yaw_rate), frame_h)
+    draw_hud(annoted, delay, nav_status, math.degrees(current_yaw_rate), frame_h)
 
     cv2.imshow("YOLOv5 Boat Navigation", annoted)
     print(nav_status)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(delay) & 0xFF == ord('q'):
         break
       
       
