@@ -91,7 +91,7 @@ arm_and_takeoff(0)
 prev_time = time.time()  # Waktu sebelumnya untuk menghitung FPS
 ground_speed = 0.3
 
-CONF_THRESHOLD    = 0.1          # ambang batas confidence
+CONF_THRESHOLD    = 0.9          # ambang batas confidence
 CENTER_HALF_WIDTH = 75           # lebar setengah zona tengah (piksel)
 LARGE_BOX_RATIO   = 0.60         # bounding box dianggap "dekat" jika > 70% luas frame
 MAX_YAW_NORMAL    = math.radians(30)   # yaw rate normal (belok)
