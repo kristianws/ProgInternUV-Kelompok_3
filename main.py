@@ -11,11 +11,35 @@ except:
 from dronekit import connect, VehicleMode, Command
 from pymavlink import mavutil
 import time
-CONFIDENT = 0.9
 
 print('Connecting...')
 vehicle = connect('udp:127.0.0.1:14551', wait_ready=True)
 # vehicle = connect('/dev/ttyACM0')
+
+model = YOLO('ball-detection-yolov5.pt')
+# cap = cv2.VideoCapture("video-3.mp4")
+cap = cv2.VideoCapture(0)
+# fps = cap.get(cv2.CAP_PROP_FPS)
+# delay = int(1000 / fps)
+
+prev_time = time.time()  # Waktu sebelumnya untuk menghitung FPS
+ground_speed = 0.3
+
+CENTER_HALF_WIDTH = 50           # lebar setengah zona tengah (piksel)
+MAX_YAW_NORMAL    = math.radians(30)   # yaw rate normal (belok)
+MAX_YAW_CLOSE     = 0.5   # yaw rate saat objek terlalu dekat
+YAW_STEP          = math.radians(3)    # kecepatan perubahan yaw per frame (smoothing)
+IMAGE_SIZE        = 416  
+CONFIDENT         = 0.1
+CROP_SIZE         = 0.2
+
+current_yaw_rate = 0.0 
+
+is_obstacle_avoid = False # tanda apakah kapal sedang menghindar obstacle
+has_encountered_black = False   # Mengingat apakah sudah pernah ketemu bola hitam
+empty_view_start_time = 0       # Mencatat kapan layar mulai kosong
+FINISH_TIMEOUT = 5.0
+
 
 def arm_and_takeoff(altitude):
     while not vehicle.is_armable:
@@ -34,7 +58,6 @@ def arm_and_takeoff(altitude):
             print("Target altitude reached")
             break
 
-
 def get_zone(cx, left_boundary, right_boundary):
     if cx < left_boundary:
         return "LEFT"
@@ -42,7 +65,6 @@ def get_zone(cx, left_boundary, right_boundary):
         return "RIGHT"
     else:
         return "CENTER"
-      
 
 def draw_grid(frame, left_boundary, right_boundary, frame_h):
     cv2.line(frame, (left_boundary, 0), (left_boundary, frame_h), (0, 255, 255), 2)
@@ -56,7 +78,6 @@ def draw_grid(frame, left_boundary, right_boundary, frame_h):
     cv2.putText(frame, "RIGHT",  (right_boundary + 5, label_y),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
 
-
 def draw_hud(frame, fps, nav_status, yaw_deg, frame_h):
     cv2.putText(frame, f"FPS    : {fps:.1f}",         (10, 25),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
@@ -65,9 +86,6 @@ def draw_hud(frame, fps, nav_status, yaw_deg, frame_h):
     cv2.putText(frame, f"Yaw    : {yaw_deg:.1f} deg/s", (10, 75),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-
-
-# fungsi untuk bergerak dengan kecepatan tertentu dan yaw rate tertentu
 def gerak(vx,yaw_rate):
     msg = vehicle.message_factory.set_position_target_local_ned_encode(
         0,
@@ -83,28 +101,7 @@ def gerak(vx,yaw_rate):
     vehicle.flush()
 
 
-model = YOLO('ball-detection-yolov5.pt')
-model.conf = CONFIDENT # confidence threshold
-cap = cv2.VideoCapture("video-3.mp4")
-# cap = cv2.VideoCapture(0)
-fps = cap.get(cv2.CAP_PROP_FPS)
-delay = int(1000 / fps)
 arm_and_takeoff(0)
-
-prev_time = time.time()  # Waktu sebelumnya untuk menghitung FPS
-ground_speed = 0.3
-
-CENTER_HALF_WIDTH = 50           # lebar setengah zona tengah (piksel)
-MAX_YAW_NORMAL    = math.radians(30)   # yaw rate normal (belok)
-MAX_YAW_CLOSE     = 0.4   # yaw rate saat objek terlalu dekat
-YAW_STEP          = math.radians(3)    # kecepatan perubahan yaw per frame (smoothing)
-
-current_yaw_rate = 0.0 
-
-is_obstacle_avoid = False # tanda apakah kapal sedang menghindar obstacle
-has_encountered_black = False   # Mengingat apakah sudah pernah ketemu bola hitam
-empty_view_start_time = 0       # Mencatat kapan layar mulai kosong
-FINISH_TIMEOUT = 5.0
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -112,12 +109,14 @@ while cap.isOpened():
         break
       
     frame_h, frame_w = frame.shape[:2]
+    batas_atas = int(frame_h * CROP_SIZE)
+    frame[0:batas_atas, :] = (0,0,0) 
     
     center_x      = frame_w //2
     left_boundary = center_x - CENTER_HALF_WIDTH
     right_boundary = center_x + CENTER_HALF_WIDTH
       
-    results = model(frame, imgsz = 416)
+    results = model(source=frame, imgsz = IMAGE_SIZE, conf=CONFIDENT)
     boxes   = results[0].boxes
 
     red_ball   = None
@@ -156,55 +155,47 @@ while cap.isOpened():
             nav_status      = "[ARAH KAPAL] LURUS (KEDUA BOLA)"
             
         elif center_zone == "RIGHT":
-            target_yaw_rate = MAX_YAW_NORMAL
+            target_yaw_rate = -MAX_YAW_NORMAL
             nav_status      = "[ARAH KAPAL] BELOK KANAN (KEDUA BOLA)"
 
         elif center_zone == "LEFT":
-            target_yaw_rate = -MAX_YAW_NORMAL
+            target_yaw_rate = MAX_YAW_NORMAL
             nav_status      = "[ARAH KAPAL] BELOK KIRI (KEDUA BOLA)"
 
-    elif black_ball is not None and black_ball.conf[0] > CONFIDENT:
+    elif black_ball is not None:
       # is_obstacle_avoid = True
-      bx1, _, bx2, _ = black_ball.xyxy[0].tolist()
-      black_cx   = (bx1 + bx2) / 2
-      black_zone = get_zone(black_cx, left_boundary, right_boundary)
-      quarter_y = frame_h * 0.9
-      if black_zone == "RIGHT":
-        if black_cx > quarter_y: 
+      x, y, w, h = black_ball.xyxy[0].tolist()
+      black_cx   = x + w / 2
+      batas_bawah = frame_h * 0.9
+      batas_samping = frame_w * 0.8
+      if batas_samping-10 < black_cx < batas_samping + 10:
+        if black_cx > batas_bawah: 
           has_encountered_black = True
-          target_yaw_rate = MAX_YAW_CLOSE
-          ground_speed = 0.5
-          nav_status      = "[ARAH KAPAL] BELOK KANAN (BOLA HITAM DEKAT)"
-          is_obstacle_avoid = True
-      elif black_zone == "LEFT" or black_zone == "CENTER":
+          target_yaw_rate       = MAX_YAW_CLOSE
+          ground_speed          = 0.5
+          nav_status            = "[ARAH KAPAL] BELOK KANAN (BOLA HITAM DEKAT)"
+          is_obstacle_avoid     = True
+        else:
           target_yaw_rate = -MAX_YAW_NORMAL
-          nav_status      = "[ARAH KAPAL] BELOK KIRI (BOLA HITAM)"
-      elif black_zone == "RIGHT":
-          target_yaw_rate = 0.0
-          nav_status      = "[ARAH KAPAL] LURUS (BOLA HITAM)"
+          nav_status      = "[ARAH KAPAL] KE KIRI (BOLA HITAM)"
+      elif black_cx < batas_samping-10:
+          target_yaw_rate = MAX_YAW_NORMAL
+          nav_status      = "[ARAH KAPAL] KE KANAN (BOLA HITAM)"
+      elif black_cx > batas_samping+10:
+          target_yaw_rate = -MAX_YAW_NORMAL
+          nav_status      = "[ARAH KAPAL] KE KIRI (BOLA HITAM)"
 
     # Logika navigasi apabila hanya bola merah yang terdeteksi
     elif red_ball is not None:
         is_obstacle_avoid = False
-        rx1, _, rx2, _ = red_ball.xyxy[0].tolist()
-        red_cx   = (rx1 + rx2) / 2
-        red_zone = get_zone(red_cx, left_boundary, right_boundary)
-        
-        if red_zone == "CENTER" or red_zone == "RIGHT":
-            target_yaw_rate = MAX_YAW_NORMAL
-            nav_status      = "[ARAH KAPAL] BELOK KANAN ( BOLA MERAH)"
-
+        target_yaw_rate   = MAX_YAW_NORMAL
+        nav_status        = "[ARAH KAPAL] BELOK KANAN (BOLA MERAH)"
 
     # Logika navigasi apabila hanya bola hijau yang terdeteksi
     elif green_ball is not None:
         is_obstacle_avoid = False
-        gx1, _, gx2, _ = green_ball.xyxy[0].tolist()
-        green_cx   = (gx1 + gx2) / 2
-        green_zone = get_zone(green_cx, left_boundary, right_boundary)
-        
-        if green_zone == "CENTER" or green_zone == "LEFT":
-            target_yaw_rate = -MAX_YAW_NORMAL
-            nav_status      = "[ARAH KAPAL] BELOK KIRI (BOLA HIJAU)"
+        target_yaw_rate   = -MAX_YAW_NORMAL
+        nav_status        = "[ARAH KAPAL] BELOK KIRI (BOLA HIJAU)"
 
     else:
         if is_obstacle_avoid == True:
@@ -242,12 +233,12 @@ while cap.isOpened():
     curr_time = time.time()
     fps       = 1 / (curr_time - prev_time + 1e-9)
     prev_time = curr_time
-    draw_hud(annoted, delay, nav_status, math.degrees(current_yaw_rate), frame_h)
+    draw_hud(annoted, fps, nav_status, math.degrees(current_yaw_rate), frame_h)
 
     cv2.imshow("YOLOv5 Boat Navigation", annoted)
     print(nav_status)
 
-    if cv2.waitKey(delay) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord('q'):
         break
       
       
